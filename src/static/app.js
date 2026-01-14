@@ -20,8 +20,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const response = await fetch("/activities");
       const activities = await response.json();
 
-      // Clear loading message
+      // Clear loading message and activity select options (keep placeholder)
       activitiesList.innerHTML = "";
+      activitySelect.innerHTML = '<option value="">-- Select an activity --</option>';
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -34,7 +35,7 @@ document.addEventListener("DOMContentLoaded", () => {
         let participantsHTML = "";
         if (Array.isArray(details.participants) && details.participants.length > 0) {
           const items = details.participants
-            .map((p) => `<li>${escapeHtml(p)}</li>`)
+            .map((p) => `<li data-email="${escapeHtml(p)}" data-activity="${escapeHtml(name)}">${escapeHtml(p)}</li>`)
             .join("");
           participantsHTML = `
             <div class="participants-section">
@@ -69,10 +70,47 @@ document.addEventListener("DOMContentLoaded", () => {
         option.textContent = name;
         activitySelect.appendChild(option);
       });
+
+      // After rendering participants, attach delete icons
+      addDeleteIcons();
     } catch (error) {
       activitiesList.innerHTML = "<p>Failed to load activities. Please try again later.</p>";
       console.error("Error fetching activities:", error);
     }
+  }
+
+  // Function to unregister a participant
+  async function unregisterParticipant(email, activityName) {
+    try {
+      const url = `/activities/${encodeURIComponent(activityName)}/unregister?email=${encodeURIComponent(email)}`;
+      const response = await fetch(url, { method: 'DELETE' });
+      if (response.ok) {
+        // Re-fetch activities to refresh UI
+        await fetchActivities();
+      } else {
+        console.error('Failed to unregister participant.');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    }
+  }
+
+  // Add delete icons next to each participant
+  function addDeleteIcons() {
+    const participantItems = document.querySelectorAll('#activities-list li');
+    participantItems.forEach(item => {
+      // Avoid adding multiple delete icons if present
+      if (item.querySelector('.delete-icon')) return;
+
+      const email = item.getAttribute('data-email');
+      const activityName = item.getAttribute('data-activity');
+      const deleteIcon = document.createElement('span');
+      deleteIcon.className = 'delete-icon';
+      deleteIcon.textContent = ' 🗑️'; // Unicode for trash can
+      deleteIcon.style.cursor = 'pointer';
+      deleteIcon.addEventListener('click', () => unregisterParticipant(email, activityName));
+      item.appendChild(deleteIcon);
+    });
   }
 
   // Handle form submission
@@ -96,6 +134,9 @@ document.addEventListener("DOMContentLoaded", () => {
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
+
+        // Refresh activities to show the new participant without page reload
+        await fetchActivities();
       } else {
         messageDiv.textContent = result.detail || "An error occurred";
         messageDiv.className = "error";
@@ -116,5 +157,5 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Initialize app
-  fetchActivities();
+  fetchActivities().then(addDeleteIcons);
 });
